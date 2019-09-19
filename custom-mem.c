@@ -12,18 +12,18 @@
 #include <linux/mm.h>
 
 
-#define DEVICE_NAME "custom_mem_drv"
-#define CLASS_NAME  "custom_mem_drv"
+#define DEVICE_NAME                     "custom_mem_drv"
+#define CLASS_NAME                      "custom_mem_drv"
 
-#define DEV_MEM_ALLOC (0)
-#define DEV_MEM_FREE (1)
+#define DEV_MEM_ALLOC                   (0)
+#define DEV_MEM_FREE                    (1)
 
-#define PAGE_SHIFT      12
-#define PAGE_SIZE       (1UL << PAGE_SHIFT)
-#define PAGE_MASK       (~(PAGE_SIZE-1))
+#define CUSTOM_MEM_PAGE_SHIFT           12
+#define CUSTOM_MEM_PAGE_SIZE            (1UL << CUSTOM_MEM_PAGE_SHIFT)
+#define CUSTOM_MEM_PAGE_MASK            (~(CUSTOM_MEM_PAGE_SIZE-1))
 
-#define PAGE_ALIGN(addr)        (((addr)+PAGE_SIZE-1)&PAGE_MASK)
-#define IS_PAGE_ALIGNED(x)  (PAGE_ALIGN((uintptr_t) (x)) == (uintptr_t) (x))
+#define CUSTOM_MEM_PAGE_ALIGN(addr)     (((addr)+CUSTOM_MEM_PAGE_SIZE-1)&CUSTOM_MEM_PAGE_MASK)
+#define CUSTOM_MEM_IS_PAGE_ALIGNED(x)   (CUSTOM_MEM_PAGE_ALIGN((uintptr_t) (x)) == (uintptr_t) (x))
 
 #define MIN_ALLOC_SIZE 4096 //page size
 
@@ -76,7 +76,7 @@ static unsigned long* memAlloc(struct file* fp, size_t size, int node, int type)
 
     printk("(custom_mem) kmalloc_node() returned %d %d %p\n", alloc_size, node, block_ctrl);
 
-    if ((!block_ctrl) || !IS_PAGE_ALIGNED(block_ctrl))
+    if ((!block_ctrl) || !CUSTOM_MEM_IS_PAGE_ALIGNED(block_ctrl))
     {
         printk("(custom_mem) memAlloc() Unable to allocate memory slab"
                 " or wrong alignment: %p\n", block_ctrl);
@@ -94,7 +94,6 @@ static unsigned long* memAlloc(struct file* fp, size_t size, int node, int type)
 static int dev_mem_free(struct file *fp, uint32_t cmd, unsigned long arg)
 {
     unsigned long *mem_info_arg;
-    printk("(custom_mem) dev_mem_free()\n");
     if (fp == NULL)
     {
         printk("(custom_mem) dev_mem_free() Invalid file descriptor\n");
@@ -105,8 +104,8 @@ static int dev_mem_free(struct file *fp, uint32_t cmd, unsigned long arg)
 
     if (fp->private_data)
     {
+        printk("(custom_mem) dev_mem_free() %p %s\n", fp->private_data, (char*)fp->private_data);
         kfree(fp->private_data);
-        printk("(custom_mem) dev_mem_free() memory is freed.\n");
     }
 
     return 0;
@@ -133,6 +132,7 @@ static int dev_mem_alloc(struct file* fp, uint32_t cmd, unsigned long arg)
     if (mem_info)
     {
         fp->private_data = mem_info;
+        strcpy((char*)mem_info, "Hello from kernel space");
         return ret;
     }
 
@@ -150,7 +150,7 @@ static int __init custom_mem_init(void)
         printk(KERN_ALERT "custom_mem: custom_mem failed to register a major number\n");
         return majorNumber;
     }
-    printk("(custom_mem)registered correctly with major number %d\n", majorNumber);
+    printk("(custom_mem) registered correctly with major number %d\n", majorNumber);
 
     // Register the device class
     customcharClass = class_create(THIS_MODULE, CLASS_NAME);
@@ -194,7 +194,6 @@ static int dev_open(struct inode *inodep, struct file *filep){
 static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
 {
     int ret = 0;
-    uint64_t id = 0;
     unsigned long size;
     unsigned long phys_kmalloc_area = 0;
     void *mem_info;
@@ -208,7 +207,6 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
     mem_info = fp->private_data;
 
     size = vma->vm_end - vma->vm_start;
-    id = vma->vm_pgoff << PAGE_SHIFT;
 
     if (!mem_info)
     {
@@ -233,7 +231,7 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
 
     ret = remap_pfn_range(vma,
             vma->vm_start,
-            phys_kmalloc_area >> PAGE_SHIFT, /*Describing a Page Table Entry (12 bits right shift)*/
+            phys_kmalloc_area >> CUSTOM_MEM_PAGE_SHIFT, /*Describing a Page Table Entry (12 bits right shift)*/
             size,
             vma->vm_page_prot); //protection flags that are set for each PTE in this VMA"
     if (unlikely(ret))
