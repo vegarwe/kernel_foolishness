@@ -40,16 +40,6 @@ static int      dev_mmap(struct file *fp, struct vm_area_struct *vma);
 
 static DEFINE_MUTEX(dev_mem_lock);
 
-static struct file_operations fops =
-{
-    owner:THIS_MODULE,
-    mmap:dev_mmap,
-    unlocked_ioctl:dev_ioctl,
-    compat_ioctl:dev_ioctl,
-    open:dev_open,
-    release:dev_release,
-};
-
 struct test_struct
 {
     unsigned long* addr;
@@ -140,57 +130,6 @@ static int dev_mem_alloc(struct file* fp, uint32_t cmd, unsigned long arg)
 }
 
 
-static int __init custom_mem_init(void)
-{
-    mutex_init(&dev_mem_lock);
-
-    majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
-    if (majorNumber<0)
-    {
-        printk(KERN_ALERT "custom_mem: custom_mem failed to register a major number\n");
-        return majorNumber;
-    }
-    printk("(custom_mem) registered correctly with major number %d\n", majorNumber);
-
-    // Register the device class
-    customcharClass = class_create(THIS_MODULE, CLASS_NAME);
-    if (IS_ERR(customcharClass))                 // Check for error and clean up if there is
-    {
-        unregister_chrdev(majorNumber, DEVICE_NAME);
-        printk(KERN_ALERT "(custom_mem) Failed to register device class\n");
-        return PTR_ERR(customcharClass);          // Correct way to return an error on a pointer
-    }
-    printk("(custom_mem) device class registered correctly\n");
-
-    // Register the device driver
-    customcharDevice = device_create(customcharClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
-    if (IS_ERR(customcharDevice))                // Clean up if there is an error
-    {
-        class_destroy(customcharClass);           // Repeated code but the alternative is goto statements
-        unregister_chrdev(majorNumber, DEVICE_NAME);
-        printk(KERN_ALERT "Failed to create the device\n");
-        return PTR_ERR(customcharDevice);
-    }
-    printk("(custom_mem) device class created correctly!\n"); // Made it! device was initialized
-
-    return 0;
-}
-
-static void __exit custom_mem_exit(void) /* Destructor */
-{
-    printk("(custom_mem) exit!\n");
-    device_destroy(customcharClass, MKDEV(majorNumber, 0));     // remove the device
-    class_unregister(customcharClass);                          // unregister the device class
-    class_destroy(customcharClass);                             // remove the device class
-    unregister_chrdev(majorNumber, DEVICE_NAME);             // unregister the major number
-}
-
-static int dev_open(struct inode *inodep, struct file *filep){
-    numberOpens++;
-    printk("(custom_mem) dev_open(). Device has been opened %d time(s).\n", numberOpens);
-    return 0;
-}
-
 static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
 {
     int ret = 0;
@@ -244,12 +183,6 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
 }
 
 
-static int dev_release(struct inode *inodep, struct file *filep){
-    printk(KERN_INFO "(custom_mem) dev_release()\n");
-    numberOpens = 0;
-    return 0;
-}
-
 static long dev_ioctl(struct file *fp, uint32_t cmd, unsigned long arg)
 {
     int ret;
@@ -274,6 +207,74 @@ static long dev_ioctl(struct file *fp, uint32_t cmd, unsigned long arg)
             return ret;
     }
     return 0;
+}
+
+static int dev_open(struct inode *inodep, struct file *filep){
+    numberOpens++;
+    printk("(custom_mem) dev_open(). Device has been opened %d time(s).\n", numberOpens);
+    return 0;
+}
+
+static int dev_release(struct inode *inodep, struct file *filep){
+    printk(KERN_INFO "(custom_mem) dev_release()\n");
+    numberOpens = 0;
+    return 0;
+}
+
+
+static struct file_operations fops =
+{
+    owner:THIS_MODULE,
+    mmap:dev_mmap,
+    unlocked_ioctl:dev_ioctl,
+    compat_ioctl:dev_ioctl,
+    open:dev_open,
+    release:dev_release,
+};
+
+static int __init custom_mem_init(void)
+{
+    mutex_init(&dev_mem_lock);
+
+    majorNumber = register_chrdev(0, DEVICE_NAME, &fops);
+    if (majorNumber<0)
+    {
+        printk(KERN_ALERT "custom_mem: custom_mem failed to register a major number\n");
+        return majorNumber;
+    }
+    printk("(custom_mem) registered correctly with major number %d\n", majorNumber);
+
+    // Register the device class
+    customcharClass = class_create(THIS_MODULE, CLASS_NAME);
+    if (IS_ERR(customcharClass))                 // Check for error and clean up if there is
+    {
+        unregister_chrdev(majorNumber, DEVICE_NAME);
+        printk(KERN_ALERT "(custom_mem) Failed to register device class\n");
+        return PTR_ERR(customcharClass);          // Correct way to return an error on a pointer
+    }
+    printk("(custom_mem) device class registered correctly\n");
+
+    // Register the device driver
+    customcharDevice = device_create(customcharClass, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
+    if (IS_ERR(customcharDevice))                // Clean up if there is an error
+    {
+        class_destroy(customcharClass);           // Repeated code but the alternative is goto statements
+        unregister_chrdev(majorNumber, DEVICE_NAME);
+        printk(KERN_ALERT "Failed to create the device\n");
+        return PTR_ERR(customcharDevice);
+    }
+    printk("(custom_mem) device class created correctly!\n"); // Made it! device was initialized
+
+    return 0;
+}
+
+static void __exit custom_mem_exit(void) /* Destructor */
+{
+    printk("(custom_mem) exit!\n");
+    device_destroy(customcharClass, MKDEV(majorNumber, 0));     // remove the device
+    class_unregister(customcharClass);                          // unregister the device class
+    class_destroy(customcharClass);                             // remove the device class
+    unregister_chrdev(majorNumber, DEVICE_NAME);             // unregister the major number
 }
 
 module_init(custom_mem_init);
