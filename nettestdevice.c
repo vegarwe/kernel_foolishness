@@ -101,7 +101,7 @@ int nettestdevice_start_xmit(struct sk_buff *skb, struct net_device *dev)
             ((u8 *)saddr)[0], ((u8 *)saddr)[1], ((u8 *)saddr)[2], ((u8 *)saddr)[3],
             ((u8 *)daddr)[0], ((u8 *)daddr)[1], ((u8 *)daddr)[2], ((u8 *)daddr)[3]);
 
-    printk(KERN_DEBUG"(nettestdevice) ih->protocol = %d\n", (int) ih->protocol );
+    printk(KERN_DEBUG"(nettestdevice) ih->protocol = %d\n", (int) ih->protocol);
 
     // Save onto private struct
     if (priv0)
@@ -122,8 +122,9 @@ int nettestdevice_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 
             icmph->type = ICMP_ECHOREPLY;   //#define  ICMP_ECHOREPLY	0 /* echo reply */
-            ((u8*)saddr)[3] = 2;
-            ((u8*)daddr)[3] = 1;
+            u8 tmp = ((u8*)saddr)[3];
+            ((u8*)saddr)[3] = ((u8*)daddr)[3];
+            ((u8*)daddr)[3] = tmp;
 
             printk(KERN_DEBUG"(nettestdevice) start_xmit ICMP_ECHO %d.%d.%d.%d --> %d.%d.%d.%d\n",
                     ((u8 *)saddr)[0], ((u8 *)saddr)[1], ((u8 *)saddr)[2], ((u8 *)saddr)[3],
@@ -139,11 +140,12 @@ int nettestdevice_start_xmit(struct sk_buff *skb, struct net_device *dev)
             ih->check  = 0;
             ih->check = ip_fast_csum((unsigned char *)ih, ih->ihl);
 
+            printk(KERN_DEBUG"(nettestdevice) ih->check %u ihl %u\n", ih->check, ih->ihl);
+
             // Packet from device driver is queued for processing by upper (protocol) level.
             netif_rx(skb);
 
-            if( priv0 )
-                priv0->stats.tx_packets++;
+            if (priv0) priv0->stats.tx_packets++;
             return NETDEV_TX_OK;
         }
     }
@@ -197,7 +199,7 @@ int nettestdevice_header(struct sk_buff *skb,
 
 static const struct header_ops nettestdevice_header_ops =
 {
-    .create  = nettestdevice_header,
+    .create = nettestdevice_header,
 };
 
 
