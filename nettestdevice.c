@@ -75,9 +75,9 @@
 
 
 struct nettestdevice_priv {
-    struct net_device_stats stats;
-    struct sk_buff *skb;
-    struct net_device *dev;
+  struct net_device_stats stats;
+  struct sk_buff *skb;
+  struct net_device *dev;
 };
 
 static struct net_device *interface1;
@@ -87,160 +87,160 @@ static struct nettestdevice_priv *priv0;
 int nettestdevice_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 
-    char *data = skb->data;
-    int len = skb->len;
-    struct sk_buff *skb_priv;
-    struct icmphdr* icmph;
+  char *data = skb->data;
+  int len = skb->len;
+  struct sk_buff *skb_priv;
+  struct icmphdr* icmph;
 
 
-    struct iphdr *ih = (struct iphdr *)(data+sizeof(struct ethhdr));
-    u32 *saddr = &ih->saddr;
-    u32 *daddr = &ih->daddr;
+  struct iphdr *ih = (struct iphdr *)(data+sizeof(struct ethhdr));
+  u32 *saddr = &ih->saddr;
+  u32 *daddr = &ih->daddr;
 
-    printk(KERN_DEBUG"(nettestdevice) start_xmit Initial Internet address =: %d.%d.%d.%d --> %d.%d.%d.%d\n",
-            ((u8 *)saddr)[0], ((u8 *)saddr)[1], ((u8 *)saddr)[2], ((u8 *)saddr)[3],
-            ((u8 *)daddr)[0], ((u8 *)daddr)[1], ((u8 *)daddr)[2], ((u8 *)daddr)[3]);
+  printk(KERN_DEBUG"(nettestdevice) start_xmit Initial Internet address =: %d.%d.%d.%d --> %d.%d.%d.%d\n",
+      ((u8 *)saddr)[0], ((u8 *)saddr)[1], ((u8 *)saddr)[2], ((u8 *)saddr)[3],
+      ((u8 *)daddr)[0], ((u8 *)daddr)[1], ((u8 *)daddr)[2], ((u8 *)daddr)[3]);
 
-    printk(KERN_DEBUG"(nettestdevice) ih->protocol = %d\n", (int) ih->protocol);
+  printk(KERN_DEBUG"(nettestdevice) ih->protocol = %d\n", (int) ih->protocol);
 
-    // Save onto private struct
-    if (priv0)
+  // Save onto private struct
+  if (priv0)
+  {
+    priv0->skb = skb;
+    priv0->dev = dev;
+  }
+
+  if (ih->protocol == IPPROTO_ICMP) //IPPROTO_ICMP 1
+  {
+    printk(KERN_INFO"(nettestdevice) IPPROTO_ICMP!\n");
+    icmph = icmp_hdr(skb);
+
+    //#define	ICMP_ECHO 8/* echo service */
+    if (icmph->type == ICMP_ECHO)
     {
-        priv0->skb = skb;
-        priv0->dev = dev;
+      printk(KERN_INFO"(nettestdevice) IPPROTO_ECHO!\n");
+
+
+      icmph->type = ICMP_ECHOREPLY;   //#define  ICMP_ECHOREPLY	0 /* echo reply */
+      u8 tmp = ((u8*)saddr)[3];
+      ((u8*)saddr)[3] = ((u8*)daddr)[3];
+      ((u8*)daddr)[3] = tmp;
+
+      printk(KERN_DEBUG"(nettestdevice) start_xmit ICMP_ECHO %d.%d.%d.%d --> %d.%d.%d.%d\n",
+          ((u8 *)saddr)[0], ((u8 *)saddr)[1], ((u8 *)saddr)[2], ((u8 *)saddr)[3],
+          ((u8 *)daddr)[0], ((u8 *)daddr)[1], ((u8 *)daddr)[2], ((u8 *)daddr)[3]);
+
+
+      struct ethhdr *eth = (struct ethhdr*)data; // skb_push(skb,ETH_HLEN);
+      memcpy(eth->h_dest, dev->dev_addr, dev->addr_len);
+
+      skb->dev = dev;
+      skb->protocol =  eth_type_trans(skb, dev);
+      // Recompute the checksum. Verify for integrity after modification
+      ih->check  = 0;
+      ih->check = ip_fast_csum((unsigned char *)ih, ih->ihl);
+
+      printk(KERN_DEBUG"(nettestdevice) ih->check %u ihl %u\n", ih->check, ih->ihl);
+
+      // Packet from device driver is queued for processing by upper (protocol) level.
+      netif_rx(skb);
+
+      if (priv0) priv0->stats.tx_packets++;
+      return NETDEV_TX_OK;
     }
+  }
 
-    if (ih->protocol == IPPROTO_ICMP) //IPPROTO_ICMP 1
-    {
-        printk(KERN_INFO"(nettestdevice) IPPROTO_ICMP!\n");
-        icmph = icmp_hdr(skb);
-
-        //#define	ICMP_ECHO 8/* echo service */
-        if (icmph->type == ICMP_ECHO)
-        {
-            printk(KERN_INFO"(nettestdevice) IPPROTO_ECHO!\n");
-
-
-            icmph->type = ICMP_ECHOREPLY;   //#define  ICMP_ECHOREPLY	0 /* echo reply */
-            u8 tmp = ((u8*)saddr)[3];
-            ((u8*)saddr)[3] = ((u8*)daddr)[3];
-            ((u8*)daddr)[3] = tmp;
-
-            printk(KERN_DEBUG"(nettestdevice) start_xmit ICMP_ECHO %d.%d.%d.%d --> %d.%d.%d.%d\n",
-                    ((u8 *)saddr)[0], ((u8 *)saddr)[1], ((u8 *)saddr)[2], ((u8 *)saddr)[3],
-                    ((u8 *)daddr)[0], ((u8 *)daddr)[1], ((u8 *)daddr)[2], ((u8 *)daddr)[3]);
-
-
-            struct ethhdr *eth = (struct ethhdr*)data; // skb_push(skb,ETH_HLEN);
-            memcpy(eth->h_dest, dev->dev_addr, dev->addr_len);
-
-            skb->dev = dev;
-            skb->protocol =  eth_type_trans(skb, dev);
-            // Recompute the checksum. Verify for integrity after modification
-            ih->check  = 0;
-            ih->check = ip_fast_csum((unsigned char *)ih, ih->ihl);
-
-            printk(KERN_DEBUG"(nettestdevice) ih->check %u ihl %u\n", ih->check, ih->ihl);
-
-            // Packet from device driver is queued for processing by upper (protocol) level.
-            netif_rx(skb);
-
-            if (priv0) priv0->stats.tx_packets++;
-            return NETDEV_TX_OK;
-        }
-    }
-
-    dev_kfree_skb(skb);
-    return 0;
+  dev_kfree_skb(skb);
+  return 0;
 }
 
 
 struct net_device_stats *nettestdevice_stats(struct net_device *dev)
 {
-    return &(((struct nettestdevice_priv*)netdev_priv(dev))->stats);
+  return &(((struct nettestdevice_priv*)netdev_priv(dev))->stats);
 }
 
 int nettestdevice_open(struct net_device *dev)
 {
-    printk(KERN_DEBUG"(nettestdevice) nettestdevice_open()\n");
+  printk(KERN_DEBUG"(nettestdevice) nettestdevice_open()\n");
 
-    // Kernel function to start the queue
-    netif_start_queue(dev);
-    return 0;
+  // Kernel function to start the queue
+  netif_start_queue(dev);
+  return 0;
 }
 
 int nettestdevice_stop(struct net_device *dev)
 {
-    printk(KERN_DEBUG"(nettestdevice) nettestdevice_stop()\n");
+  printk(KERN_DEBUG"(nettestdevice) nettestdevice_stop()\n");
 
-    // Stop the queue
-    netif_stop_queue(dev);
-    return 0;
+  // Stop the queue
+  netif_stop_queue(dev);
+  return 0;
 }
 
 static const struct net_device_ops nettestdevice_device_ops =
 {
-    .ndo_open = nettestdevice_open,
-    .ndo_stop = nettestdevice_stop,
-    .ndo_start_xmit = nettestdevice_start_xmit,
-    .ndo_get_stats = nettestdevice_stats,
+  .ndo_open = nettestdevice_open,
+  .ndo_stop = nettestdevice_stop,
+  .ndo_start_xmit = nettestdevice_start_xmit,
+  .ndo_get_stats = nettestdevice_stats,
 };
 
 
 int nettestdevice_header(struct sk_buff *skb,
-        struct net_device *dev,
-        unsigned short type,
-        const void *daddr,
-        const void *saddr,
-        unsigned int len)
+    struct net_device *dev,
+    unsigned short type,
+    const void *daddr,
+    const void *saddr,
+    unsigned int len)
 {
-    return dev->hard_header_len;
+  return dev->hard_header_len;
 }
 
 static const struct header_ops nettestdevice_header_ops =
 {
-    .create = nettestdevice_header,
+  .create = nettestdevice_header,
 };
 
 
 int init_module (void)
 {
-    int i;
+  int i;
 
-    interface1 = alloc_etherdev(sizeof(struct nettestdevice_priv));
+  interface1 = alloc_etherdev(sizeof(struct nettestdevice_priv));
 
-    for (i = 0 ; i < 6 ; i++) interface1->dev_addr[i] = (unsigned char)i;
-    for (i = 0 ; i < 6 ; i++) interface1->broadcast[i] = (unsigned char)15;//0xF
-    interface1->hard_header_len = 14;
+  for (i = 0 ; i < 6 ; i++) interface1->dev_addr[i] = (unsigned char)i;
+  for (i = 0 ; i < 6 ; i++) interface1->broadcast[i] = (unsigned char)15;//0xF
+  interface1->hard_header_len = 14;
 
-    memcpy(interface1->name, "interface1\0", 11);
+  memcpy(interface1->name, "interface1\0", 11);
 
-    interface1->netdev_ops = &nettestdevice_device_ops;
-    //interface1->header_ops = &nettestdevice_header_ops;
+  interface1->netdev_ops = &nettestdevice_device_ops;
+  //interface1->header_ops = &nettestdevice_header_ops;
 
-    // No ARP
-    interface1->flags |= IFF_NOARP;
+  // No ARP
+  interface1->flags |= IFF_NOARP;
 
-    // Access network device private data
-    priv0  = netdev_priv(interface1);
+  // Access network device private data
+  priv0  = netdev_priv(interface1);
 
-    // Register the devices
-    register_netdev(interface1);
-    printk(KERN_DEBUG"(nettestdevice) Interfaces registered successfully.\n");
+  // Register the devices
+  register_netdev(interface1);
+  printk(KERN_DEBUG"(nettestdevice) Interfaces registered successfully.\n");
 
-    return 0;
+  return 0;
 }
 
 void cleanup_module(void)
 {
 
-    if (interface1)
-    {
-        unregister_netdev(interface1);
-        free_netdev(interface1);
-    }
+  if (interface1)
+  {
+    unregister_netdev(interface1);
+    free_netdev(interface1);
+  }
 
-    printk(KERN_DEBUG"(nettestdevice) cleanup_module()\n");
+  printk(KERN_DEBUG"(nettestdevice) cleanup_module()\n");
 }
 
 MODULE_LICENSE("GPL");
