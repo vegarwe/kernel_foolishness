@@ -1,5 +1,5 @@
 
-obj-m += syncdevice.o
+obj-m += custom-mem.o
 
 all:
 	echo ${CFLAGS}
