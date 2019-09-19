@@ -31,7 +31,6 @@ void RBuffer_Init(struct RBuffer* pRBuffer)
 {
 	mutex_init(&kernel_lock);
 	current_index = remove_index = current_size = 0;
-	
 }
 
 int RBuffer_Insert(struct RBuffer* pRBuffer, long value)
@@ -41,10 +40,11 @@ int RBuffer_Insert(struct RBuffer* pRBuffer, long value)
 		return 1;
 	}
 
-	pRBuffer[current_index].timestamp = value;
-
 	//Protect current_index and current_size
 	mutex_lock(&kernel_lock);
+
+	pRBuffer[current_index].timestamp = value;
+
 	if (current_index + 1 >= MAX_SIZE)
 	{
 		current_index = 0;
@@ -70,12 +70,12 @@ long RBuffer_Remove(struct RBuffer* pRBuffer)
 		return 0;
 	}
 
+	//Protect remove_index and current_size
+	mutex_lock(&kernel_lock);
 
 	long ts = pRBuffer[remove_index].timestamp;
 	pRBuffer[remove_index].timestamp = 0;
 
-	//Protect remove_index and current_size
-	mutex_lock(&kernel_lock);
 	if ( remove_index +1 >= MAX_SIZE)
 	{
 		remove_index = 0;
@@ -90,8 +90,7 @@ long RBuffer_Remove(struct RBuffer* pRBuffer)
 	mutex_unlock(&kernel_lock);
 
 	return ts;
-	
-}
+
 
 int RBuffer_Size(void)
 {
@@ -113,6 +112,4 @@ void RBuffer_ShowContents(struct RBuffer* pRBuffer)
 			"size = %d\n", pRBuffer[i].timestamp, i, current_index, remove_index, current_size);
 	}
 }
-
-
 
