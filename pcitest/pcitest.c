@@ -1,5 +1,3 @@
-//Minimal PCI Test Module
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -9,13 +7,15 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
+// make && sudo rmmod pcitest || true && sudo insmod pcitest.ko && sudo dmesg -c
+
 
 #define DEVICE_NAME "pcitest"
 #define VENDOR_ID 0x8086 //Intel
 #define DEVICE_ID 0x100F //Ethernet Controller
 
 
-//Assuming that our device’s configuration header requests 128 bytes on BAR 0
+// Assuming that our device’s configuration header requests 128 bytes on BAR 0
 #define CONFIGURATION_HEADER_REQUEST 128
 #define BAR_IO 0
 
@@ -42,16 +42,15 @@ struct pcidevice_privdata
 
 static struct pcidevice_privdata * privdata;
 
-static int pcidevice_probe(struct pci_dev *pdev,
-        const struct pci_device_id* ent)
+static int pcidevice_probe(struct pci_dev *pdev, const struct pci_device_id* ent)
 {
     printk("(pci test) probe()\n");
 
-    unsigned long ioaddr;
-    u32 status;
-    u16 VendorID, DeviceID;
+    u16 VendorID;
+    u16 DeviceID;
     u8 InterruptLine;
-    int i,rc = 0;
+    int i;
+    int rc = 0;
 
     privdata = kzalloc(sizeof(*privdata), GFP_KERNEL);
     if (!privdata)
@@ -64,7 +63,7 @@ static int pcidevice_probe(struct pci_dev *pdev,
     pci_set_drvdata(pdev, privdata);
 
 
-    //Access PCI configuration space - Quick Test
+    // Access PCI configuration space - Quick Test
     //int pci_read_config_word(struct pci_dev *dev, int where, u16 *val);
 
     /*
@@ -86,24 +85,24 @@ static int pcidevice_probe(struct pci_dev *pdev,
     privdata->DeviceID = DeviceID;
     privdata->InterruptLine = InterruptLine;
 
-    //Enable the device
+    // Enable the device
     rc = pci_enable_device(pdev);
     if (rc)
     {
-        printk(" (pci_test) pci_enable_device() failed.\n");
+        printk("(pci_test) pci_enable_device() failed.\n");
         return -ENODEV;
     }
 
-    //cheking that BAR0 is defined and memory mapped
+    // Cheking that BAR0 is defined and memory mapped
     if ((pci_resource_flags(pdev, BAR_IO) & IORESOURCE_MEM) != IORESOURCE_MEM)
     {
         printk("(pci_test) BAR0 is not defined in Memory space.\n");
 
         //cheking that BAR0 is defined and IO mapped
-        if((pci_resource_flags(pdev, BAR_IO) & IORESOURCE_IO) != IORESOURCE_IO)
+        if ((pci_resource_flags(pdev, BAR_IO) & IORESOURCE_IO) != IORESOURCE_IO)
         {
-            printk("(pci_test) BAR0 is not defined in IO space.\n");
-            rc = 1;
+            printk("(pci_test) BAR0 is not defined in IO space or in Memory.\n");
+            return -ENODEV;
         }
         else
         {
@@ -115,44 +114,30 @@ static int pcidevice_probe(struct pci_dev *pdev,
         printk("(pci_test) BAR0 is defined in Memory space.\n");
     }
 
+    // Total 6 BARS (regions) could be memory mapped or port-mapped.
+
+    // Reserve pci I/O and memory resource
+    rc = pci_request_region(pdev, BAR_IO, DEVICE_NAME);
     if (rc)
     {
-        printk(" (pci_test) BAR0 is not defined in Memory or IO space.\n");
-        return -ENODEV;
-    }
-
-    //Total 6 BARS (regions) could be memory mapped or port-mapped.
-
-    //Reserve pci I/O and memory resource
-    rc = pci_request_region( pdev, BAR_IO, DEVICE_NAME);
-    if (rc)
-    {
-        printk(" (pci_test) BAR0 is not defined in Memory or IO space.\n");
+        printk("(pci_test) BAR0 could not be requested.\n");
         return -ENODEV;
     }
 
     /* Using this function you will get a __iomem address to your device BAR.
      * You can access it using ioread*() and iowrite*(). */
-
-    privdata->regs = pci_iomap(pdev,
-            BAR_IO,
-            CONFIGURATION_HEADER_REQUEST);
-
-
+    privdata->regs = pci_iomap(pdev, BAR_IO, CONFIGURATION_HEADER_REQUEST);
     if (!privdata->regs)
     {
         printk("(pci_test) Failed to map BAR 0.\n");
         return -ENODEV;
     }
 
-    //printk("(pci_test) Bar 0 returned status %d.\n", status);
     //iowrite32(1, &privdata->regs[0x10]);
 
-    for (i=0; i<16; i++)
+    for (i = 0; i < 16; i++)
     {
-        printk("(pci_test) Register 0x%x = 0x%04x \n",
-                i,
-                ioread32(&privdata->regs[i]));
+        printk("(pci_test) Register 0x%x = 0x%04x \n", i, ioread32(&privdata->regs[i]));
     }
 
 
