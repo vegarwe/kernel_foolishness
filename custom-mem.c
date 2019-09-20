@@ -11,6 +11,8 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 
+// make && sudo rmmod custom-mem && sudo insmod custom-mem.ko && sudo dmesg -c
+
 
 #define DEVICE_NAME                     "custom_mem_drv"
 #define CLASS_NAME                      "custom_mem_drv"

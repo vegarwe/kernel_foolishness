@@ -6,6 +6,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+// gcc -o custom-mem-test custom-mem-test.c && sudo ./custom-mem-test && dmesg
 
 /* IOCTL number for use between the kernel and the user space application.
    _IOR  --- For reading from device to user space app,
