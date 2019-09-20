@@ -1,5 +1,5 @@
 
-obj-m += syncdevice.o
+obj-m += pic18f.o
 
 all:
 	echo ${CFLAGS}

@@ -15,6 +15,7 @@
 
 */
 
+// make && sudo rmmod pic18f && sudo insmod pic18f.ko && sudo dmesg -c
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
