@@ -25,25 +25,14 @@
 #define CUSTOM_MEM_PAGE_ALIGN(addr)     (((addr)+CUSTOM_MEM_PAGE_SIZE-1)&CUSTOM_MEM_PAGE_MASK)
 #define CUSTOM_MEM_IS_PAGE_ALIGNED(x)   (CUSTOM_MEM_PAGE_ALIGN((uintptr_t) (x)) == (uintptr_t) (x))
 
-#define MIN_ALLOC_SIZE 4096 //page size
+#define MIN_ALLOC_SIZE                  4096 //page size
 
 static int      majorNumber;                        ///< Stores the device number -- determined automatically
 static int      numberOpens = 0;                    ///< Counts the number of times the device is opened
 static struct   class*  customcharClass  = NULL;    ///< The device-driver class struct pointer
 static struct   device* customcharDevice = NULL;    ///< The device-driver device struct pointer
 
-static int      dev_open(struct inode *, struct file *);
-static int      dev_release(struct inode *, struct file *);
-static long     dev_ioctl(struct file *fp, uint32_t cmd, unsigned long arg);
-static int      dev_mmap(struct file *fp, struct vm_area_struct *vma);
-
-
 static DEFINE_MUTEX(dev_mem_lock);
-
-struct test_struct
-{
-    unsigned long* addr;
-};
 
 
 static unsigned long* memAlloc(struct file* fp, size_t size, int node, int type)
@@ -78,8 +67,8 @@ static unsigned long* memAlloc(struct file* fp, size_t size, int node, int type)
     printk("(custom_mem) userMemAlloc() Block ctrl allocated %p \n", block_ctrl);
 
     return block_ctrl;
-
 }
+
 
 static int dev_mem_free(struct file *fp, uint32_t cmd, unsigned long arg)
 {
@@ -137,15 +126,7 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
     unsigned long phys_kmalloc_area = 0;
     void *mem_info;
 
-    /*
-       What remap_pfn_range does is create another page table entry, with a different virtual address
-       to the same physical memory page that doesn't have that bit set.
-       Usually, it's a bad idea btw :-)
-       */
-
     mem_info = fp->private_data;
-
-    size = vma->vm_end - vma->vm_start;
 
     if (!mem_info)
     {
@@ -153,12 +134,16 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
         return -1;
     }
 
-    if (vma != 0)
+    if (vma == 0)
     {
-        printk("(custom_mem) vma_start = %03lx vma_end = %03lx size = %ld\n",
-                vma->vm_start, vma->vm_end, size);
+        printk("(custom_mem) vmw struct not populated.\n");
+        return -1;
     }
 
+    size = vma->vm_end - vma->vm_start;
+
+    printk("(custom_mem) vma_start = %03lx vma_end = %03lx size = %ld\n",
+            vma->vm_start, vma->vm_end, size);
 
     mutex_lock(&dev_mem_lock);
     phys_kmalloc_area = virt_to_phys(mem_info);
@@ -168,6 +153,11 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
     printk("(custom_mem) dev_mmap() phys_kmalloc_area = %03lx virt_kmalloc = %p\n",
             phys_kmalloc_area, (unsigned long*)mem_info);
 
+    /*
+       What remap_pfn_range does is create another page table entry, with a
+       different virtual address to the same physical memory page that doesn't
+       have that bit set.  Usually, it's a bad idea btw :-)
+       */
     ret = remap_pfn_range(vma,
             vma->vm_start,
             phys_kmalloc_area >> CUSTOM_MEM_PAGE_SHIFT, /*Describing a Page Table Entry (12 bits right shift)*/
@@ -179,6 +169,7 @@ static int dev_mmap(struct file *fp, struct vm_area_struct *vma)
     }
 
     printk("(custom_mem) remap_pfn_range successful! ret = %d\n", ret);
+
     return ret;
 }
 
@@ -187,8 +178,8 @@ static long dev_ioctl(struct file *fp, uint32_t cmd, unsigned long arg)
 {
     int ret;
     printk(KERN_INFO "(custom_mem) dev_ioctl() cmd = %d arg = %ld\n", cmd, arg);
-    ret = 0;
-    switch(cmd) {
+
+    switch (cmd) {
         case DEV_MEM_ALLOC:
             mutex_lock(&dev_mem_lock);
             ret = dev_mem_alloc(fp, cmd, arg);
@@ -202,18 +193,22 @@ static long dev_ioctl(struct file *fp, uint32_t cmd, unsigned long arg)
             mutex_unlock(&dev_mem_lock);
             if(ret> 0) return -EIO;
             break;
+
         default:
             printk("(custom_mem) default IOCTL\n");
-            return ret;
+            return 0;
     }
+
     return 0;
 }
+
 
 static int dev_open(struct inode *inodep, struct file *filep){
     numberOpens++;
     printk("(custom_mem) dev_open(). Device has been opened %d time(s).\n", numberOpens);
     return 0;
 }
+
 
 static int dev_release(struct inode *inodep, struct file *filep){
     printk(KERN_INFO "(custom_mem) dev_release()\n");
