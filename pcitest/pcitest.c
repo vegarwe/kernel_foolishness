@@ -38,13 +38,27 @@ struct pcidevice_privdata
     u16 VendorID, DeviceID;
     u8 InterruptLine;
     void __iomem* regs;
+    u8 * mem;
+    struct wait_queue_head waitq;
 };
 
 static struct pcidevice_privdata * privdata;
 
+
+// Interrupt Handler
+static irqreturn_t pcitest_msi(int irq, void *data)
+{
+    printk("(pci_test) pcitest_msi\n");
+    //struct pcitest_privdata *privdata = data;
+    //privdata->flag = 1;
+    wake_up_interruptible(&privdata->waitq);
+    return IRQ_HANDLED;
+}
+
+
 static int pcidevice_probe(struct pci_dev *pdev, const struct pci_device_id* ent)
 {
-    printk("(pci test) probe()\n");
+    printk("(pci_test) probe()\n");
 
     u16 VendorID;
     u16 DeviceID;
@@ -144,7 +158,6 @@ static int pcidevice_probe(struct pci_dev *pdev, const struct pci_device_id* ent
     //Enable bus mastering for the device
     pci_set_master(pdev);
 
-    /*
     //Setup a single MSI interrupt
     if (pci_enable_msi(pdev))
     {
@@ -152,63 +165,49 @@ static int pcidevice_probe(struct pci_dev *pdev, const struct pci_device_id* ent
         return -ENODEV;
     }
 
-    if (pci_dma_supported(pdev, ) )
+    if (! pci_set_dma_mask(pdev, DMA_BIT_MASK(32)))
     {
-        printk("(pci_test) dma not supported.\n");
-        return _ENODEV;
+        printk("(pci_test) dma 32 not supported.\n");
+        return -ENODEV;
     }
 
-    if(!pci_set_dma_mask(pdev, DMA_BIT_MASK(64)))
+    if (! pci_set_dma_mask(pdev, DMA_BIT_MASK(64)))
     {
+        printk("(pci_test) dma 64 not supported.\n");
     }
 
-    dma_addr_t dma_mem = pci_map_single( pdev,
-    privtest->mem,
-    PAGE_SIZE*(1<<memorder),
-    PCI_DMA_FROMDEVICE);
+    privdata->mem = kzalloc(PAGE_SIZE * 2, GFP_KERNEL);
+    dma_addr_t dma_mem = pci_map_single(pdev, privdata->mem, PAGE_SIZE*2, PCI_DMA_FROMDEVICE);
 
     init_waitqueue_head(&privdata->waitq);
     rc = request_irq(pdev->irq, pcitest_msi, 0, DEVICE_NAME, privdata);
-
-    //If error goto clean;
-    */
+    if (rc)
+    {
+        printk("(pci_test) request_irq failed with %d\n", rc);
+        goto clean;
+    }
 
     return  0;
 
 
 clean:
+    pci_unmap_single(pdev, privdata->mem, PAGE_SIZE * 2, PCI_DMA_FROMDEVICE);
 
-    /*
-       pci_unmap_single(pdev,
-       privtest->dma_mem,
-       PAGE_SIZE * (1 << memorder),
-       PCI_DMA_FROMDEVICE);
-
-       free_pages ((unsigned long) privdata->mem, memorder);
-       free_irq(pdev->irq,      privdata);
-       pci_disable_msi(pdev);
-    */
+    kfree(privdata->mem);
+    free_irq(pdev->irq, privdata);
+    pci_disable_msi(pdev);
 
     pci_release_region(pdev, BAR_IO);
     pci_clear_master(pdev);
     pci_disable_device(pdev);
+    kfree(privdata);
     return -ENODEV;
 }
-
-/*
-// Interrupt Handler
-static irqreturn_t pcitest_msi(int irq, void *data)
-{
-    struct pcitest_privdata *privdata = data;
-    privdata->flag = 1;
-    wake_up_interruptible(&privdata->waitq);
-    return IRQ_HANDLED;
-}*/
 
 static void pcidevice_remove(struct pci_dev* pdev)
 {
     // Release the IO region
-    printk("(pcie test) Module remove.\n");
+    printk("(pci_test) Module remove.\n");
     pci_release_region(pdev, BAR_IO);
     pci_clear_master(pdev);
     pci_disable_device(pdev);
@@ -227,14 +226,14 @@ static struct pci_driver pcidevice_driver =
 
 static int __init pcidevice_init(void)
 {
-    printk( "(pci test) Module init.\n");
+    printk("(pci_test) Module init.\n");
 
     return pci_register_driver(&pcidevice_driver);
 }
 
 static void __exit pcidevice_exit(void)
 {
-    printk("(pci test) Module exit.\n");
+    printk("(pci_test) Module exit.\n");
     pci_unregister_driver(&pcidevice_driver);
 }
 
